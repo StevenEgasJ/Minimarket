@@ -846,10 +846,17 @@ async function showFinalInvoice(order) {
             <td class="text-end">$${item.subtotal.toFixed(2)}</td>
         </tr>`
     ).join('');
+    // Prevent showing multiple invoice modals at the same time.
+    if (window.__invoiceModalOpen) {
+        console.log('Invoice modal already open - skipping duplicate show');
+        return;
+    }
 
-    // Show invoice modal but keep it open when the user clicks "Descargar PDF".
-    // We use preConfirm to trigger the PDF download and return false so the modal does not close.
-    const result = await Swal.fire({
+    window.__invoiceModalOpen = true;
+    try {
+        // Show invoice modal but keep it open when the user clicks "Descargar PDF".
+        // We use preConfirm to trigger the PDF download and return false so the modal does not close.
+        const result = await Swal.fire({
         title: '¡Compra Realizada con Éxito!',
         html: `
             <div class="text-start">
@@ -928,15 +935,28 @@ async function showFinalInvoice(order) {
         }
     });
 
-    // Handle deny/cancel actions after the modal is finally closed by the user
-    try {
-        if (result && result.isDenied) {
-            // Go to products page as requested
-            window.location.href = 'product.html';
-        } else if (result && result.isDismissed) {
-            // User dismissed the modal (no automatic navigation). Keep them on checkout.
-        }
-    } catch (e) { console.warn('post-invoice action failed', e); }
+        // Handle deny/cancel actions after the modal is finally closed by the user
+        try {
+            if (result && result.isDenied) {
+                // Go to products page as requested
+                window.location.href = 'product.html';
+            } else if (result && result.isConfirmed) {
+                // Confirm (Descargar) intentionally keeps modal open via preConfirm; nothing to do here
+            } else if (result && result.isDismissed) {
+                // If the user clicked the Cancel button (labeled "Ver Mis Compras"), navigate there
+                try {
+                    if (result.dismiss === Swal.DismissReason.cancel) {
+                        window.location.href = 'compras.html';
+                    }
+                } catch (inner) {
+                    // Fallback: do nothing
+                }
+            }
+        } catch (e) { console.warn('post-invoice action failed', e); }
+    } finally {
+        // clear the flag so future calls can show the modal again
+        try { window.__invoiceModalOpen = false; } catch(e) { /* ignore */ }
+    }
 }
 
 // Función para inicializar mapa en confirmación de ubicación

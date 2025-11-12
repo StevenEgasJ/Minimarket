@@ -900,6 +900,17 @@ function wirePageEvents(){
     // If invoked from an event, prevent default
     if(e && e.preventDefault) try{ e.preventDefault(); }catch(_){}
 
+    // Guard to prevent concurrent place-order executions which may open multiple modals
+    if (window.__placingOrder) {
+      console.log('Place order already in progress — ignoring duplicate call');
+      return;
+    }
+    window.__placingOrder = true;
+    // disable UI controls that can trigger another place-order
+    const _placeBtn = document.getElementById('place-order');
+    const _placeWrap = document.getElementById('place-order-wrap');
+    try { if(_placeBtn) _placeBtn.disabled = true; if(_placeWrap) _placeWrap.style.pointerEvents = 'none'; } catch(e){}
+
     // If manual block is visible, prefer manual street fields
     const manualBlockEl = document.getElementById('manual-location-block');
     let composedStreet = (document.getElementById('ci_street') && document.getElementById('ci_street').value.trim()) || '';
@@ -1089,7 +1100,7 @@ function wirePageEvents(){
       console.warn('⚠️ Server checkout failed, falling back to local save:', err);
     }
 
-    // If server processed the order, refresh products from server to reflect updated stock.
+  // If server processed the order, refresh products from server to reflect updated stock.
     if (serverOrderId) {
       try {
         if (window.productManager && typeof window.productManager.loadProducts === 'function') {
@@ -1104,6 +1115,8 @@ function wirePageEvents(){
       localStorage.removeItem('carrito');
       if(typeof actualizarCarritoUI === 'function') actualizarCarritoUI();
       // DO NOT redirect automatically — keep user on the checkout page so they can choose options
+      // Clean up placing flag and UI before returning
+      try { window.__placingOrder = false; if(_placeBtn) _placeBtn.disabled = false; if(_placeWrap) _placeWrap.style.pointerEvents = 'auto'; } catch(e){}
       return;
     }
 
@@ -1120,7 +1133,12 @@ function wirePageEvents(){
   localStorage.removeItem('carrito');
   if(typeof actualizarCarritoUI === 'function') actualizarCarritoUI();
 
-  await showFinalInvoice(order);
+  try {
+    await showFinalInvoice(order);
+  } finally {
+    // Ensure placing flag is cleared and UI re-enabled after modal handling completes
+    try { window.__placingOrder = false; if(_placeBtn) _placeBtn.disabled = false; if(_placeWrap) _placeWrap.style.pointerEvents = 'auto'; } catch(e){}
+  }
 
   // DO NOT redirect automatically — keep user on the checkout page so they can choose options
   }
